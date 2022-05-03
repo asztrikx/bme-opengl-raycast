@@ -136,22 +136,10 @@ struct Light {
 	vec4 wPosition; // homogeneous coordinates, can be at ideal point
 };
 
-struct CheckerBoardTexture : public Texture {
-	CheckerBoardTexture(const int width, const int height) : Texture() {
-		std::vector<vec4> image(width * height);
-		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
-		for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-			image[y * width + x] = (x & 1) ^ (y & 1) ? yellow : blue;
-		}
-		create(width, height, image, GL_NEAREST);
-	}
-};
-
 struct RenderState {
 	mat4	           MVP, M, Minv, V, P;
 	Material *         material;
 	std::vector<Light> lights;
-	Texture *          texture;
 	vec3	           wEye;
 };
 
@@ -226,7 +214,6 @@ class PhongShader : public Shader {
 		uniform Material material;
 		uniform Light[8] lights;
 		uniform int   nLights;
-		uniform sampler2D diffuseTexture;
 
 		in  vec3 wNormal;
 		in  vec3 wView;
@@ -239,17 +226,17 @@ class PhongShader : public Shader {
 			vec3 N = normalize(wNormal);
 			vec3 V = normalize(wView); 
 			if (dot(N, V) < 0) N = -N; // TODO do it in vertex shader
-			vec3 texColor = texture(diffuseTexture, texcoord).rgb;
-			vec3 ka = material.ka * texColor;
-			vec3 kd = material.kd * texColor;
 
+			// TODO kd 2x volt texColorozva :D
+			// TODO sky color was La in hf2
 			vec3 radiance = vec3(0, 0, 0);
 			for(int i = 0; i < nLights; i++) {
 				vec3 L = normalize(wLight[i]);
 				vec3 H = normalize(L + V);
-				float cost = max(dot(N,L), 0), cosd = max(dot(N,H), 0);
-				radiance += ka * lights[i].La + 
-                           (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le;
+				float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
+				// TODO ambient is calculated for every light wtf
+				radiance += material.ka * lights[i].La + 
+                           (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * lights[i].Le;
 			}
 			fragmentColor = vec4(radiance, 1);
 		}
@@ -263,7 +250,6 @@ class PhongShader : public Shader {
 		setUniform(state.M, "M");
 		setUniform(state.Minv, "Minv");
 		setUniform(state.wEye, "wEye");
-		setUniform(*state.texture, std::string("diffuseTexture"));
 		setUniformMaterial(*state.material, "material");
 
 		setUniform((int)state.lights.size(), "nLights");
@@ -372,7 +358,6 @@ struct Paraboloid : public ParamSurface {
 		U = U * 2.0f * (float)M_PI;
 		V = V * height;
 		
-		vec3 eN90 = vec3(0,1,0);
 		float dist = V.f - eP.z;
 		float r = sqrtf(powf(dist,2) - powf(abs(V.f - f.z),2));
 		X = Cos(U) * r;
@@ -394,16 +379,14 @@ struct Cylinder : public ParamSurface {
 struct Object {
 	Shader* shader;
 	Material* material;
-	Texture* texture;
 	Geometry* geometry;
 	vec3 scale, translation, rotationAxis;
 	float rotationAngle;
 	vec3 dir;
 	
-	Object(Shader * _shader, Material * _material, Texture * _texture, Geometry * _geometry)
+	Object(Shader * _shader, Material * _material, Geometry * _geometry)
 	:scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0), dir(0,0,1) {
 		shader = _shader;
-		texture = _texture;
 		material = _material;
 		geometry = _geometry;
 	}
@@ -430,7 +413,6 @@ struct Object {
 		state.Minv = Minv;
 		state.MVP = state.M * state.V * state.P;
 		state.material = material;
-		state.texture = texture;
 		shader->Bind(state);
 		geometry->Draw();
 	}
@@ -502,34 +484,30 @@ class Scene {
 		Shader * phongShader = new PhongShader();
 
 		// Materials
-		Material * material0 = new Material;
-		material0->kd = vec3(0.6f, 0.4f, 0.2f);
-		material0->ks = vec3(4, 4, 4);
-		material0->ka = vec3(0.1f, 0.1f, 0.1f);
-		material0->shininess = 100;
+		Material * materialLamp = new Material;
+		materialLamp->kd = vec3(55, 60, 63)/255.0f;
+		materialLamp->ks = vec3(2,2,2);
+		materialLamp->ka = vec3(0,0,0);
+		materialLamp->shininess = 50;
 
-		Material * material1 = new Material;
-		material1->kd = vec3(0.8f, 0.6f, 0.4f);
-		material1->ks = vec3(0.3f, 0.3f, 0.3f);
-		material1->ka = vec3(0.2f, 0.2f, 0.2f);
-		material1->shininess = 30;
-
-		// Textures
-		Texture * texture4x8 = new CheckerBoardTexture(4, 8);
-		Texture * texture15x20 = new CheckerBoardTexture(15, 20);
+		Material * materialPlane = new Material;
+		materialPlane->kd = vec3(110, 76, 67)/255.0f;
+		materialPlane->ks = vec3(0.1f,0.1f,0.1f);
+		materialPlane->ka = vec3(0, 0, 0);
+		materialPlane->shininess = 50;
 
 		// Geometries
 		Geometry* cylinder = new Cylinder();
 		Geometry* sphere = new Sphere();
 		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
 
-		cylinderObjStand = new Object(phongShader, material0, texture4x8, cylinder);
-		cylinderObj0 = new Object(phongShader, material0, texture4x8, cylinder);
-		cylinderObj1 = new Object(phongShader, material0, texture4x8, cylinder);
-		sphereObj0 = new Object(phongShader, material0, texture4x8, sphere);
-		sphereObj1 = new Object(phongShader, material0, texture4x8, sphere);
-		sphereObj2 = new Object(phongShader, material0, texture4x8, sphere);
-		paraboloidObj = new Object(phongShader, material0, texture4x8, paraboloid);
+		cylinderObjStand = new Object(phongShader, materialLamp, cylinder);
+		cylinderObj0 = new Object(phongShader, materialLamp, cylinder);
+		cylinderObj1 = new Object(phongShader, materialLamp, cylinder);
+		sphereObj0 = new Object(phongShader, materialLamp, sphere);
+		sphereObj1 = new Object(phongShader, materialLamp, sphere);
+		sphereObj2 = new Object(phongShader, materialLamp, sphere);
+		paraboloidObj = new Object(phongShader, materialLamp, paraboloid);
 		
 		cylinderObjStand->scale = vec3(bigCylinderR,bigCylinderR,bigCylinderH/2);
 		cylinderObj0->scale = vec3(cylinderR,cylinderR,cylinderH0/2);
