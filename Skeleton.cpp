@@ -289,7 +289,7 @@ class Plane: public Geometry {
 		for (int i = 0; i < 4; i++) {
 			vtxData[i].normal = vec3(0,0,1); // EZ TRANSZFORMÁLÓDIK UGYANÚGY
 		}
-		glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(VertexData), &vtxData[0], GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, vtxData.size() * sizeof(VertexData), &vtxData[0], GL_STATIC_DRAW);
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
@@ -304,6 +304,42 @@ class Plane: public Geometry {
 	void Draw() {
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	}
+};
+
+// TODO move this create to outside func
+class Circle: public Geometry {
+	struct VertexData {
+		vec3 position, normal;
+	};
+
+	void create() {
+		std::vector<VertexData> vtxData;
+		for (int i = 0; i < tessellationLevel; i++) {
+			float angle = i / ((float)tessellationLevel - 1);
+			angle *= 2*M_PI;
+			VertexData vtx;
+			vtx.position = vec3(cosf(angle), sinf(angle), 0);
+			vtx.normal = vec3(0,0,1);
+			vtxData.push_back(vtx); 
+		}
+		
+		glBufferData(GL_ARRAY_BUFFER, vtxData.size() * sizeof(VertexData), &vtxData[0], GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, position));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
+	}
+
+  public:
+	Circle() {
+		create();
+	}
+
+	void Draw() {
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, tessellationLevel);
 	}
 };
 
@@ -351,7 +387,7 @@ class ParamSurface : public Geometry {
 	void Draw() {
 		glBindVertexArray(vao);
 		for (unsigned int i = 0; i < nStrips; i++)
-			glDrawArrays(GL_TRIANGLE_STRIP, i *  nVtxPerStrip, nVtxPerStrip);
+			glDrawArrays(GL_TRIANGLE_STRIP, i * nVtxPerStrip, nVtxPerStrip);
 	}
 };
 
@@ -476,6 +512,7 @@ class Scene {
 	
 	Object* planeObj;
 	Object* cylinderObjStand;
+	Object* circleObj;
 	Object* cylinderObj0;
 	Object* cylinderObj1;
 	Object* sphereObj0;
@@ -521,11 +558,13 @@ class Scene {
 		// Geometries
 		Geometry* plane = new Plane();
 		Geometry* cylinder = new Cylinder();
+		Geometry* circle = new Circle();
 		Geometry* sphere = new Sphere();
 		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
 
 		planeObj = new Object(phongShader, materialPlane, plane);
 		cylinderObjStand = new Object(phongShader, materialLamp, cylinder);
+		circleObj = new Object(phongShader, materialLamp, circle);
 		cylinderObj0 = new Object(phongShader, materialLamp, cylinder);
 		cylinderObj1 = new Object(phongShader, materialLamp, cylinder);
 		sphereObj0 = new Object(phongShader, materialLamp, sphere);
@@ -533,7 +572,9 @@ class Scene {
 		sphereObj2 = new Object(phongShader, materialLamp, sphere);
 		paraboloidObj = new Object(phongShader, materialLamp, paraboloid);
 		
+		planeObj->scale = vec3(200,200,1);
 		cylinderObjStand->scale = vec3(bigCylinderR,bigCylinderR,bigCylinderH/2);
+		circleObj->scale = vec3(bigCylinderR,bigCylinderR,1);
 		cylinderObj0->scale = vec3(cylinderR,cylinderR,cylinderH0/2);
 		cylinderObj1->scale = vec3(cylinderR,cylinderR,cylinderH1/2);
 		sphereObj0->scale = vec3(sphereR,sphereR,sphereR);
@@ -544,10 +585,12 @@ class Scene {
 		cylinderObj1->rotationAxis = rot1;
 
 		cylinderObjStand->translation = vec3(0,0,bigCylinderH/2);
+		circleObj->translation = vec3(0,0,bigCylinderH);
 		sphereObj0->translation = joint0;
 
 		objects.push_back(planeObj);
 		objects.push_back(cylinderObjStand);
+		objects.push_back(circleObj);
 		objects.push_back(cylinderObj0);
 		objects.push_back(cylinderObj1);
 		objects.push_back(sphereObj0);
