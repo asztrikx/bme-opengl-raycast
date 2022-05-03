@@ -66,28 +66,6 @@ float floatEqual(float subject, float number) {
 	return subject > number - eps && subject < number + eps;
 }
 
-vec3 perpendicular(vec3 v) {
-	float coos[] = {v.x, v.y, v.z};
-	float result[3];
-
-	int zeroCount = 0;
-	float sum = 0.0f;
-	int lastNonZeroIndex = 0;
-	for (int i = 0; i < 3; i++) {
-		if (coos[i] == 0) {
-			zeroCount++;
-		} else {
-			sum += coos[i];
-			lastNonZeroIndex = i;
-		}
-		result[i] = 1;
-	}
-
-	sum -= coos[lastNonZeroIndex];
-	result[lastNonZeroIndex] = -sum / coos[lastNonZeroIndex];
-	return vec3(result[0], result[1], result[2]);
-}
-
 mat4 Identity() {
 	return mat4(
 		1,0,0,0,
@@ -275,37 +253,6 @@ class Geometry {
 	}
 };
 
-class Plane: public Geometry {
-	struct VertexData {
-		vec3 position, normal;
-	};
-
-	void create() {
-		std::vector<VertexData> vtxData(4);
-		vtxData[0].position = vec3(-1,-1,0);
-		vtxData[1].position = vec3(-1,1,0);
-		vtxData[2].position = vec3(1,-1,0);
-		vtxData[3].position = vec3(1,1,0);
-		for (int i = 0; i < 4; i++) {
-			vtxData[i].normal = vec3(0,0,1); // EZ TRANSZFORMÁLÓDIK UGYANÚGY
-		}
-		glBufferData(GL_ARRAY_BUFFER, vtxData.size() * sizeof(VertexData), &vtxData[0], GL_STATIC_DRAW);
-
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, position));
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
-	}
-  public:
-	Plane() {
-		create();
-	}
-
-	void Draw() {
-		glBindVertexArray(vao);
-		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-	}
-};
 
 // TODO move this create to outside func
 class Circle: public Geometry {
@@ -391,8 +338,17 @@ class ParamSurface : public Geometry {
 	}
 };
 
+struct Plane: public ParamSurface {
+	Plane() { create (1,1); }
+	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
+		U = U - 0.5f;
+		V = V - 0.5f;
+		X = U; Y = V; Z = 0;
+	}
+};
+
 struct Sphere : public ParamSurface {
-	Sphere() { create(); }
+	Sphere() { create (); }
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
 		U = U * 2.0f * (float)M_PI, V = V * (float)M_PI;
 		X = Cos(U) * Sin(V); Y = Sin(U) * Sin(V); Z = Cos(V);
@@ -477,8 +433,14 @@ struct Object {
 		geometry->Draw();
 	}
 
-	virtual void Animate(float tstart, float tend) {
-		rotationAngle = 0.8f * tend; // TODO ez mi?
+	virtual void Animate(float dt) {
+		/*
+		dir0 -> 3*dt;
+		dir1 -> -2*dt;
+		paraDir -> -3*dt;
+		*/
+
+		//rotationAngle = 0.8f * tend; // TODO ez mi?
 	}
 };
 
@@ -625,9 +587,16 @@ class Scene {
 		for (Object * obj : objects) obj->Draw(state);
 	}
 
-	void Animate(float tstart, float tend) {
-		return;
-		for (Object * obj : objects) obj->Animate(tstart, tend);
+	void Animate(float dt) {
+		vec4 t;
+
+		/*eye = eye - lookat;
+		t = vec4(eye.x,eye.y,eye.z,1) * RotationMatrix(3*dt, vec3(0,0,1));
+		eye = vec3(t.x, t.y, t.z);
+		eye = eye+lookat;
+		camera.wEye = eye;*/
+
+		for (Object * obj : objects) obj->Animate(dt);
 	}
 };
 
@@ -663,7 +632,7 @@ void onIdle() {
 
 	for (float t = tstart; t < tend; t += dt) {
 		float Dt = fmin(dt, tend - t);
-		scene.Animate(t, t + Dt);
+		scene.Animate(Dt);
 	}
 	glutPostRedisplay();
 }
