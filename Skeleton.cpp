@@ -177,12 +177,10 @@ class PhongShader : public Shader {
 
 		layout(location = 0) in vec3  vtxPos;
 		layout(location = 1) in vec3  vtxNorm;
-		layout(location = 2) in vec2  vtxUV;
 
 		out vec3 wNormal;
 		out vec3 wView;
 		out vec3 wLight[8];
-		out vec2 texcoord;
 
 		void main() {
 			gl_Position = vec4(vtxPos, 1) * MVP;
@@ -193,7 +191,6 @@ class PhongShader : public Shader {
 			}
 		    wView  = wEye * wPosition.w - wPosition.xyz;
 		    wNormal = (Minv * vec4(vtxNorm, 0)).xyz;
-		    texcoord = vtxUV;
 		}
 	)";
 
@@ -218,7 +215,6 @@ class PhongShader : public Shader {
 		in vec3 wNormal;
 		in vec3 wView;
 		in vec3 wLight[8];
-		in vec2 texcoord;
 		
         out vec4 fragmentColor;
 
@@ -283,7 +279,6 @@ class ParamSurface : public Geometry {
 	// inline struct
 	struct VertexData {
 		vec3 position, normal;
-		vec2 texcoord;
 	};
 
 	unsigned int nVtxPerStrip, nStrips;
@@ -294,7 +289,6 @@ class ParamSurface : public Geometry {
 
 	VertexData GenVertexData(float u, float v) {
 		VertexData vtxData;
-		vtxData.texcoord = vec2(u, v);
 		Dnum2 X, Y, Z;
 		Dnum2 U(u, vec2(1, 0)), V(v, vec2(0, 1));
 		eval(U, V, X, Y, Z);
@@ -318,10 +312,8 @@ class ParamSurface : public Geometry {
 
 		glEnableVertexAttribArray(0);
 		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, position));
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
-		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, texcoord));
 	}
 
 	void Draw() {
@@ -428,11 +420,11 @@ class Scene {
 	std::vector<Light> lights;
 	
 	//vec3 La = vec3(0.1f, 0.1f, 0.1f);
+	//float epsilon = 0.005;
 
 	vec3 viewUp = vec3(0,0,1);
 	vec3 lookat = vec3(1,0,0);
 	vec3 eye = vec3(7,0,5);
-	//float epsilon = 0.005;
 
 	float bigCylinderH = 0.1;
 	float bigCylinderR = 0.5;
@@ -448,9 +440,6 @@ class Scene {
 	vec3 rot1 = normalize(vec3(2,1,2));
 	vec3 rot2 = normalize(vec3(2,2,1));
 	vec3 joint0 = vec3(0,0,bigCylinderH);
-	//vec3 kd1 = vec3(55, 60, 63)/255.0f, kd2 = vec3(110, 76, 67)/255.0f;
-	//Material* materialLamp = new Material(kd1, vec3(2,2,2), 50);
-	//Material* materialPlane = new Material(kd2, vec3(0.1f,0.1f,0.1f), 50);
 	//vec3 sun = vec3(5,5,5);
 	
 	Object* cylinderObjStand;
