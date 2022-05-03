@@ -275,6 +275,38 @@ class Geometry {
 	}
 };
 
+class Plane: public Geometry {
+	struct VertexData {
+		vec3 position, normal;
+	};
+
+	void create() {
+		std::vector<VertexData> vtxData(4);
+		vtxData[0].position = vec3(-1,-1,0);
+		vtxData[1].position = vec3(-1,1,0);
+		vtxData[2].position = vec3(1,-1,0);
+		vtxData[3].position = vec3(1,1,0);
+		for (int i = 0; i < 4; i++) {
+			vtxData[i].normal = vec3(0,0,1); // EZ TRANSZFORMÁLÓDIK UGYANÚGY
+		}
+		glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(VertexData), &vtxData[0], GL_STATIC_DRAW);
+
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, position));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
+	}
+  public:
+	Plane() {
+		create();
+	}
+
+	void Draw() {
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	}
+};
+
 class ParamSurface : public Geometry {
 	// inline struct
 	struct VertexData {
@@ -442,6 +474,7 @@ class Scene {
 	vec3 joint0 = vec3(0,0,bigCylinderH);
 	//vec3 sun = vec3(5,5,5);
 	
+	Object* planeObj;
 	Object* cylinderObjStand;
 	Object* cylinderObj0;
 	Object* cylinderObj1;
@@ -486,10 +519,12 @@ class Scene {
 		materialPlane->shininess = 50;
 
 		// Geometries
+		Geometry* plane = new Plane();
 		Geometry* cylinder = new Cylinder();
 		Geometry* sphere = new Sphere();
 		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
 
+		planeObj = new Object(phongShader, materialPlane, plane);
 		cylinderObjStand = new Object(phongShader, materialLamp, cylinder);
 		cylinderObj0 = new Object(phongShader, materialLamp, cylinder);
 		cylinderObj1 = new Object(phongShader, materialLamp, cylinder);
@@ -511,6 +546,7 @@ class Scene {
 		cylinderObjStand->translation = vec3(0,0,bigCylinderH/2);
 		sphereObj0->translation = joint0;
 
+		objects.push_back(planeObj);
 		objects.push_back(cylinderObjStand);
 		objects.push_back(cylinderObj0);
 		objects.push_back(cylinderObj1);
