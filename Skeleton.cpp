@@ -170,10 +170,10 @@ class PhongShader : public Shader {
 			vec4 wPosition;
 		};
 
-		uniform mat4  MVP, M, Minv;
+		uniform mat4 MVP, M, Minv;
 		uniform Light[8] lights;
-		uniform int   nLights;
-		uniform vec3  wEye;
+		uniform int nLights;
+		uniform vec3 wEye;
 
 		layout(location = 0) in vec3  vtxPos;
 		layout(location = 1) in vec3  vtxNorm;
@@ -215,10 +215,10 @@ class PhongShader : public Shader {
 		uniform Light[8] lights;
 		uniform int   nLights;
 
-		in  vec3 wNormal;
-		in  vec3 wView;
-		in  vec3 wLight[8];
-		in  vec2 texcoord;
+		in vec3 wNormal;
+		in vec3 wView;
+		in vec3 wLight[8];
+		in vec2 texcoord;
 		
         out vec4 fragmentColor;
 
