@@ -253,7 +253,6 @@ class Geometry {
 	}
 };
 
-
 // TODO move this create to outside func
 class Circle: public Geometry {
 	struct VertexData {
@@ -396,12 +395,12 @@ struct Object {
 	Shader* shader;
 	Material* material;
 	Geometry* geometry;
-	vec3 scale, translation, rotationAxis;
+	vec3 scale, translation, afterScaleTranslation, rotationAxis;
 	float rotationAngle;
 	vec3 dir;
 	
 	Object(Shader * _shader, Material * _material, Geometry * _geometry)
-	:scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), rotationAxis(0, 0, 1), rotationAngle(0), dir(0,0,1) {
+	:scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), afterScaleTranslation(0,0,0), rotationAxis(0, 0, 1), rotationAngle(0), dir(0,0,1) {
 		shader = _shader;
 		material = _material;
 		geometry = _geometry;
@@ -418,8 +417,17 @@ struct Object {
 			startRot = RotationMatrix(angle, axis);
 			startRotInv = RotationMatrix(-angle, axis);
 		}
-		M = ScaleMatrix(scale) * startRot * RotationMatrix(rotationAngle, rotationAxis) * TranslateMatrix(translation);
-		Minv = TranslateMatrix(-translation) * startRotInv * RotationMatrix(-rotationAngle, rotationAxis) * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
+		M = ScaleMatrix(scale);
+		M = M * startRot;
+		M = M * TranslateMatrix(afterScaleTranslation);
+		M = M * RotationMatrix(rotationAngle, rotationAxis);
+		M = M * TranslateMatrix(translation);
+
+		Minv = TranslateMatrix(-translation);
+		Minv = Minv * RotationMatrix(-rotationAngle, rotationAxis);
+		Minv = Minv * TranslateMatrix(-afterScaleTranslation);
+		Minv = Minv * startRotInv;
+		Minv = Minv * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
 	}
 
 	void Draw(RenderState state) {
@@ -440,7 +448,7 @@ struct Object {
 		paraDir -> -3*dt;
 		*/
 
-		//rotationAngle = 0.8f * tend; // TODO ez mi?
+		rotationAngle = rotationAngle + dt;
 	}
 };
 
@@ -487,9 +495,12 @@ class Scene {
 		vec3 joint1 = joint0+cylinderH0*dir0;
 		vec3 joint2 = joint1+cylinderH1*dir1;
 
-		cylinderObj0->translation = joint0 + dir0*(cylinderH0/2);
+		cylinderObj0->afterScaleTranslation = dir0*(cylinderH0/2);
+		cylinderObj1->afterScaleTranslation = dir1*(cylinderH1/2);
+
+		cylinderObj0->translation = joint0;
 		sphereObj1->translation = joint1;
-		cylinderObj1->translation = joint1 + dir1*(cylinderH1/2);
+		cylinderObj1->translation = joint1;
 		sphereObj2->translation = joint2;
 		paraboloidObj->translation = joint2;
 
@@ -546,7 +557,7 @@ class Scene {
 		cylinderObj0->rotationAxis = rot0;
 		cylinderObj1->rotationAxis = rot1;
 
-		cylinderObjStand->translation = vec3(0,0,bigCylinderH/2);
+		cylinderObjStand->afterScaleTranslation = vec3(0,0,bigCylinderH/2);
 		circleObj->translation = vec3(0,0,bigCylinderH);
 		sphereObj0->translation = joint0;
 
@@ -591,7 +602,7 @@ class Scene {
 		vec4 t;
 
 		/*eye = eye - lookat;
-		t = vec4(eye.x,eye.y,eye.z,1) * RotationMatrix(3*dt, vec3(0,0,1));
+		t = vec4(eye.x,eye.y,eye.z,1) * RotationMatrix(dt, vec3(0,0,1));
 		eye = vec3(t.x, t.y, t.z);
 		eye = eye+lookat;
 		camera.wEye = eye;*/
