@@ -61,6 +61,28 @@ template<class T> Dnum<T> Pow(Dnum<T> g, float n) {
 
 typedef Dnum<vec2> Dnum2;
 
+vec3 perpendicular(vec3 v) {
+	float coos[] = {v.x, v.y, v.z};
+	float result[3];
+
+	int zeroCount = 0;
+	float sum = 0.0f;
+	int lastNonZeroIndex = 0;
+	for (int i = 0; i < 3; i++) {
+		if (coos[i] == 0) {
+			zeroCount++;
+		} else {
+			sum += coos[i];
+			lastNonZeroIndex = i;
+		}
+		result[i] = 1;
+	}
+
+	sum -= coos[lastNonZeroIndex];
+	result[lastNonZeroIndex] = -sum / coos[lastNonZeroIndex];
+	return vec3(result[0], result[1], result[2]);
+}
+
 const int tessellationLevel = 20;
 
 struct Camera {
@@ -317,6 +339,34 @@ struct Sphere : public ParamSurface {
 	}
 };
 
+struct Paraboloid : public ParamSurface {
+	vec3 eNormal = vec3(0,0,1);
+	vec3 eP;
+	vec3 start;
+	float height;
+	vec3 f;
+
+	Paraboloid(float _height, float fDist) {
+		height = _height;
+		start = vec3(0,0,0);
+		eP = start-fDist*eNormal;
+		f = start+fDist*eNormal;
+
+		create();
+	}
+	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
+		U = U * 2.0f * (float)M_PI;
+		V = V * height;
+		
+		vec3 eN90 = vec3(0,1,0);
+		float dist = V.f - eP.z;
+		float r = sqrtf(powf(dist,2) - powf(abs(V.f - f.z),2));
+		X = Cos(U) * r;
+		Y = Sin(U) * r;
+		Z = V;
+	}
+};
+
 struct Cylinder : public ParamSurface {
 	Cylinder() { create(); }
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
@@ -392,18 +442,22 @@ class Scene {
 		Texture * texture15x20 = new CheckerBoardTexture(15, 20);
 
 		// Geometries
-		Geometry * sphere = new Sphere();
+		Geometry* sphere = new Sphere();
+		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
 
 		// Create objects by setting up their vertex data on the GPU
-		Object * sphereObject1 = new Object(phongShader, material0, texture15x20, sphere);
-		sphereObject1->translation = vec3(-1, 3, 0);
-		//sphereObject1->scale = vec3(0.5f, 1.2f, 0.5f);
-		objects.push_back(sphereObject1);
+		/*Object * sphereObject = new Object(phongShader, material0, texture15x20, sphere);
+		sphereObject->translation = vec3(-1, 3, 0);
+		objects.push_back(sphereObject);*/
+
+		Object* paraboloidObject = new Object(phongShader, material0, texture15x20, paraboloid);
+		paraboloidObject->translation = vec3(-1, 3, 0);
+		objects.push_back(paraboloidObject);
 
 		// Camera
-		camera.wEye = vec3(0, 0, 8);
+		camera.wEye = vec3(8, 0, 2);
 		camera.wLookat = vec3(0, 0, 0);
-		camera.wVup = vec3(0, 1, 0);
+		camera.wVup = vec3(0, 0, 1);
 
 		// Lights
 		lights.resize(2);
