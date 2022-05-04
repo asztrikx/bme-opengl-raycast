@@ -455,12 +455,8 @@ struct LampObject: public Object {
 	float paraH = 0.5, paraF = cylinderR + 0.1;
 	float cylinderH0 = 2;
 	float cylinderH1 = 1;
-	vec3 dir0 = normalize(vec3(1,1,2));
-	vec3 dir1 = normalize(vec3(-0.5,-1,2.8));
-	vec3 paraDir = vec3(-2,-2,1);
 	vec3 rot0 = normalize(vec3(1,1,1.5));
 	vec3 rot1 = normalize(vec3(2,1,2));
-	vec3 rot2 = normalize(vec3(2,2,1));
 	vec3 joint0 = vec3(0,0,bigCylinderH);
 
 	Object* cylinderObjStand;
@@ -482,7 +478,6 @@ struct LampObject: public Object {
 		materialLamp->ka = vec3(0,0,0);
 		materialLamp->shininess = 50;
 
-		Geometry* plane = new Plane();
 		Geometry* cylinder = new Cylinder();
 		Geometry* circle = new Circle();
 		Geometry* sphere = new Sphere();
@@ -508,13 +503,21 @@ struct LampObject: public Object {
 		cylinderObj0->rotationAxis = rot0;
 		cylinderObj1->rotationAxis = rot1;
 
-		cylinderObjStand->afterScaleTranslation = vec3(0,0,bigCylinderH/2);
 		circleObj->translation = vec3(0,0,bigCylinderH);
 		sphereObj0->translation = joint0;
+
+		// TODO cylinder ezt nem tudja beállítani?
+		cylinderObjStand->afterScaleTranslation = vec3(0,0,bigCylinderH/2);
+		cylinderObj0->afterScaleTranslation = vec3(0,0,cylinderH0/2);
+		cylinderObj1->afterScaleTranslation = vec3(0,0,cylinderH1/2);
 
 		cylinderObj0->rotationSpeed = 3.0f;
 		cylinderObj1->rotationSpeed = -2.0f;
 		paraboloidObj->rotationSpeed = -3.0f;
+
+		cylinderObj0->dir = normalize(vec3(1,1,2));
+		cylinderObj1->dir = normalize(vec3(-0.5,-1,2.8));
+		paraboloidObj->dir = normalize(vec3(-2,-2,1));
 
 		objects.push_back(cylinderObjStand);
 		objects.push_back(circleObj);
@@ -535,9 +538,6 @@ struct LampObject: public Object {
 		vec3 joint1 = joint0+cylinderH0*dir0;
 		vec3 joint2 = joint1+cylinderH1*dir1;
 
-		cylinderObj0->afterScaleTranslation = dir0*(cylinderH0/2);
-		cylinderObj1->afterScaleTranslation = dir1*(cylinderH1/2);
-
 		cylinderObj0->translation = joint0;
 		sphereObj1->translation = joint1;
 		cylinderObj1->translation = joint1;
@@ -545,10 +545,6 @@ struct LampObject: public Object {
 		paraboloidObj->translation = joint2;
 
 		paraboloidObj->rotationAxis = dir1;
-		
-		cylinderObj0->dir = dir0;
-		cylinderObj1->dir = dir1;
-		paraboloidObj->dir = paraDir;
 	}
 
 	void Draw(RenderState state) {
