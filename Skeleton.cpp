@@ -83,7 +83,7 @@ struct Camera {
   public:
 	Camera() {
 		asp = (float)windowWidth / windowHeight;
-		fov = 75.0f * (float)M_PI / 180.0f;
+		fov = 53.0f * (float)M_PI / 180.0f;
 		fp = 1; bp = 20;
 	} 
 	mat4 V() {
