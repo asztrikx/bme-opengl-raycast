@@ -506,7 +506,6 @@ struct LampObject: public Object {
 		circleObj->translation = vec3(0,0,bigCylinderH);
 		sphereObj0->translation = joint0;
 
-		// TODO cylinder ezt nem tudja beállítani?
 		cylinderObjStand->afterScaleTranslation = vec3(0,0,bigCylinderH/2);
 		cylinderObj0->afterScaleTranslation = vec3(0,0,cylinderH0/2);
 		cylinderObj1->afterScaleTranslation = vec3(0,0,cylinderH1/2);
@@ -531,12 +530,25 @@ struct LampObject: public Object {
 		Recalc();
 	}
 
-	void Recalc() {
+	vec3 getJoint1() {
 		vec3 dir0 = cylinderObj0->dir;
 		vec3 dir1 = cylinderObj1->dir;
-
 		vec3 joint1 = joint0+cylinderH0*dir0;
 		vec3 joint2 = joint1+cylinderH1*dir1;
+		return joint1;
+	}
+
+	vec3 getJoint2() {
+		vec3 dir0 = cylinderObj0->dir;
+		vec3 dir1 = cylinderObj1->dir;
+		vec3 joint1 = joint0+cylinderH0*dir0;
+		vec3 joint2 = joint1+cylinderH1*dir1;
+		return joint2;
+	}
+
+	void Recalc() {
+		vec3 joint1 = getJoint1();
+		vec3 joint2 = getJoint2();
 
 		cylinderObj0->translation = joint0;
 		sphereObj1->translation = joint1;
@@ -544,7 +556,7 @@ struct LampObject: public Object {
 		sphereObj2->translation = joint2;
 		paraboloidObj->translation = joint2;
 
-		paraboloidObj->rotationAxis = dir1;
+		paraboloidObj->rotationAxis = cylinderObj1->dir;
 	}
 
 	void Draw(RenderState state) {
@@ -573,7 +585,9 @@ class Scene {
 	vec3 lookat = vec3(1,0,0);
 	vec3 eye = vec3(7,0,5);
 
-	//vec3 sun = vec3(5,5,5);
+	vec4 sun = vec4(5,5,5,1);
+	
+	LampObject* lampObj;
 
   public:
 	void Build() {
@@ -581,7 +595,7 @@ class Scene {
 		Shader * phongShader = new PhongShader();
 
 		// Materials
-		Material * materialPlane = new Material;
+		Material * materialPlane = new Material();
 		materialPlane->kd = vec3(110, 76, 67)/255.0f;
 		materialPlane->ks = vec3(0.1f,0.1f,0.1f);
 		materialPlane->ka = vec3(0, 0, 0);
@@ -593,8 +607,8 @@ class Scene {
 		planeObj->scale = vec3(200,200,1);
 		objects.push_back(planeObj);
 
-		Object* lamp = new LampObject(phongShader);
-		objects.push_back(lamp);
+		lampObj = new LampObject(phongShader);
+		objects.push_back(lampObj);
 
 		// Camera
 		camera.wEye = eye;
@@ -603,13 +617,19 @@ class Scene {
 
 		// Lights
 		lights.resize(2);
-		lights[0].wPosition = vec4(5, 5, 4, 0);
-		lights[0].La = vec3(0.1f, 0.1f, 1);
-		lights[0].Le = vec3(3, 0, 0);
+		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
+		lights[0].Le = vec3(20,20,20);
 
-		lights[1].wPosition = vec4(5, 10, 20, 0);
-		lights[1].La = vec3(0.2f, 0.2f, 0.2f);
-		lights[1].Le = vec3(0, 3, 0);
+		lights[1].wPosition = sun;
+		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
+		lights[1].Le = vec3(2, 2, 2);
+
+		Recalc();
+	}
+
+	void Recalc() {
+		vec3 wLightPos = lampObj->getJoint2() + lampObj->paraF*lampObj->paraboloidObj->dir;
+		lights[0].wPosition = vec4(wLightPos.x,wLightPos.y,wLightPos.z,1);
 	}
 
 	void Render() {
@@ -631,6 +651,7 @@ class Scene {
 		camera.wEye = eye;*/
 
 		for (Object * obj : objects) obj->Animate(dt);
+		Recalc();
 	}
 };
 
