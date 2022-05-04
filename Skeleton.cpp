@@ -115,10 +115,15 @@ struct Light {
 };
 
 struct RenderState {
-	mat4	           MVP, M, Minv, V, P;
-	Material *         material;
+	mat4 MVP, M, Minv, V, P;
+	Material* material;
 	std::vector<Light> lights;
-	vec3	           wEye;
+	vec3 wEye;
+	// para block
+	vec3 paraDir;
+	float paraAngle;
+	// para allow
+	vec3 paraF, paraN, paraP;
 };
 
 struct Shader : public GPUProgram {
@@ -159,9 +164,11 @@ class PhongShader : public Shader {
 		out vec3 wNormal;
 		out vec3 wView;
 		out vec3 wLight[8];
+		out vec3 pos;
 
 		void main() {
 			gl_Position = vec4(vtxPos, 1) * MVP;
+			pos = vtxPos;
 			
 			vec4 wPosition = vec4(vtxPos, 1) * M;
 			for(int i = 0; i < nLights; i++) {
@@ -189,17 +196,28 @@ class PhongShader : public Shader {
 		uniform Material material;
 		uniform Light[8] lights;
 		uniform int   nLights;
+		uniform vec3 paraDir;
+		uniform float paraAngle;
+
+		uniform vec3 paraF, paraN, paraP;
 
 		in vec3 wNormal;
 		in vec3 wView;
 		in vec3 wLight[8];
+		in vec3 pos; //tesselated
 		
         out vec4 fragmentColor;
+
+		float paraImplicit(vec3 r) {
+			return length(paraF-r) - abs(dot(paraN,r-paraP));
+		}
 
 		void main() {
 			vec3 N = normalize(wNormal);
 			vec3 V = normalize(wView); 
 			if (dot(N, V) < 0) N = -N; // TODO do it in vertex shader
+
+			bool inPara = (abs(paraImplicit(pos)) < 1.0f);
 
 			// TODO kd 2x volt texColorozva :D
 			// TODO sky color was La in hf2
@@ -209,8 +227,12 @@ class PhongShader : public Shader {
 				vec3 H = normalize(L + V);
 				float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
 				// TODO ambient is calculated for every light wtf
-				radiance += material.ka * lights[i].La + 
-                           (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * lights[i].Le;
+				radiance += material.ka * lights[i].La;
+
+				// Para blocks
+				if (i != 0 || inPara || acos(dot(-L,paraDir)) < paraAngle) {
+					radiance += (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * lights[i].Le;
+				}
 			}
 			fragmentColor = vec4(radiance, 1);
 		}
@@ -224,6 +246,14 @@ class PhongShader : public Shader {
 		setUniform(state.M, "M");
 		setUniform(state.Minv, "Minv");
 		setUniform(state.wEye, "wEye");
+		
+		setUniform(state.paraDir, "paraDir");
+		setUniform(state.paraAngle, "paraAngle");
+
+		setUniform(state.paraF, "paraF");
+		setUniform(state.paraN, "paraN");
+		setUniform(state.paraP, "paraP");
+
 		setUniformMaterial(*state.material, "material");
 
 		setUniform((int)state.lights.size(), "nLights");
@@ -546,6 +576,25 @@ struct LampObject: public Object {
 		return joint2;
 	}
 
+	float getParaAngle() {
+		float dist = paraH + paraF;
+		float x = paraH - paraF;
+		float R = sqrtf(powf(dist,2) - powf(x,2));
+
+		vec3 r(R,0,paraH);
+		r = normalize(r);
+		float complementerAngle = acosf(r.x);
+		return M_PI/2 - complementerAngle;
+	}
+
+	void setRenderState(RenderState* state) {
+		state->paraDir = paraboloidObj->dir;
+		state->paraAngle = getParaAngle();
+		state->paraF = paraboloidObj->translation + state->paraDir*paraF;
+		state->paraN = state->paraDir;
+		state->paraP = paraboloidObj->translation - state->paraDir*paraF;
+	}
+
 	void Recalc() {
 		vec3 joint1 = getJoint1();
 		vec3 joint2 = getJoint2();
@@ -618,7 +667,7 @@ class Scene {
 		// Lights
 		lights.resize(2);
 		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[0].Le = vec3(20,20,20);
+		lights[0].Le = vec3(2,2,2);
 
 		lights[1].wPosition = sun;
 		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
@@ -638,17 +687,18 @@ class Scene {
 		state.V = camera.V();
 		state.P = camera.P();
 		state.lights = lights;
+		lampObj->setRenderState(&state);
 		for (Object * obj : objects) obj->Draw(state);
 	}
 
 	void Animate(float dt) {
 		vec4 t;
 
-		/*eye = eye - lookat;
+		eye = eye - lookat;
 		t = vec4(eye.x,eye.y,eye.z,1) * RotationMatrix(dt, vec3(0,0,1));
 		eye = vec3(t.x, t.y, t.z);
 		eye = eye+lookat;
-		camera.wEye = eye;*/
+		camera.wEye = eye;
 
 		for (Object * obj : objects) obj->Animate(dt);
 		Recalc();
