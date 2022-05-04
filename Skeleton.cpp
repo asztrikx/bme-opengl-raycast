@@ -396,11 +396,11 @@ struct Object {
 	Material* material;
 	Geometry* geometry;
 	vec3 scale, translation, afterScaleTranslation, rotationAxis;
-	float rotationAngle;
+	float rotationSpeed;
 	vec3 dir;
 	
 	Object(Shader * _shader, Material * _material, Geometry * _geometry)
-	:scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), afterScaleTranslation(0,0,0), rotationAxis(0, 0, 1), rotationAngle(0), dir(0,0,1) {
+	:scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), afterScaleTranslation(0,0,0), rotationAxis(0, 0, 1), dir(0,0,1) {
 		shader = _shader;
 		material = _material;
 		geometry = _geometry;
@@ -410,27 +410,26 @@ struct Object {
 		vec3 baseAxis(0,0,1);
 		vec3 axis = cross(baseAxis, dir);
 		float angle = acosf(dot(baseAxis, normalize(dir)));
-		mat4 startRot, startRotInv;
+		mat4 rotation, rotationInv;
 		if (floatEqual(angle, 0.0f)) {
-			startRot = startRotInv = Identity();
+			rotation = rotationInv = Identity();
 		} else {
-			startRot = RotationMatrix(angle, axis);
-			startRotInv = RotationMatrix(-angle, axis);
+			rotation = RotationMatrix(angle, axis);
+			rotationInv = RotationMatrix(-angle, axis);
 		}
 		M = ScaleMatrix(scale);
-		M = M * startRot;
 		M = M * TranslateMatrix(afterScaleTranslation);
-		M = M * RotationMatrix(rotationAngle, rotationAxis);
+		M = M * rotation;
 		M = M * TranslateMatrix(translation);
+		M = M;
 
 		Minv = TranslateMatrix(-translation);
-		Minv = Minv * RotationMatrix(-rotationAngle, rotationAxis);
+		Minv = Minv * rotationInv;
 		Minv = Minv * TranslateMatrix(-afterScaleTranslation);
-		Minv = Minv * startRotInv;
 		Minv = Minv * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
 	}
 
-	void Draw(RenderState state) {
+	virtual void Draw(RenderState state) {
 		mat4 M, Minv;
 		SetModelingTransform(M, Minv);
 		state.M = M;
@@ -442,28 +441,13 @@ struct Object {
 	}
 
 	virtual void Animate(float dt) {
-		/*
-		dir0 -> 3*dt;
-		dir1 -> -2*dt;
-		paraDir -> -3*dt;
-		*/
-
-		rotationAngle = rotationAngle + dt;
+		vec4 t;
+		t = vec4(dir.x, dir.y, dir.z, 1) * RotationMatrix(rotationSpeed*dt, rotationAxis);
+		dir = vec3(t.x, t.y, t.z); //its normalized
 	}
 };
 
-class Scene {
-	std::vector<Object *> objects;
-	Camera camera;
-	std::vector<Light> lights;
-	
-	//vec3 La = vec3(0.1f, 0.1f, 0.1f);
-	//float epsilon = 0.005;
-
-	vec3 viewUp = vec3(0,0,1);
-	vec3 lookat = vec3(1,0,0);
-	vec3 eye = vec3(7,0,5);
-
+struct LampObject: public Object {
 	float bigCylinderH = 0.1;
 	float bigCylinderR = 0.5;
 	float sphereR = 1.0f/8;
@@ -478,9 +462,7 @@ class Scene {
 	vec3 rot1 = normalize(vec3(2,1,2));
 	vec3 rot2 = normalize(vec3(2,2,1));
 	vec3 joint0 = vec3(0,0,bigCylinderH);
-	//vec3 sun = vec3(5,5,5);
-	
-	Object* planeObj;
+
 	Object* cylinderObjStand;
 	Object* circleObj;
 	Object* cylinderObj0;
@@ -490,8 +472,66 @@ class Scene {
 	Object* sphereObj2;
 	Object* paraboloidObj;
 
-  public:
+	std::vector<Object*> objects;
+
+	LampObject(Shader* shader)
+	: Object(nullptr, nullptr, nullptr) {
+		Material * materialLamp = new Material;
+		materialLamp->kd = vec3(55, 60, 63)/255.0f;
+		materialLamp->ks = vec3(2,2,2);
+		materialLamp->ka = vec3(0,0,0);
+		materialLamp->shininess = 50;
+
+		Geometry* plane = new Plane();
+		Geometry* cylinder = new Cylinder();
+		Geometry* circle = new Circle();
+		Geometry* sphere = new Sphere();
+		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
+
+		cylinderObjStand = new Object(shader, materialLamp, cylinder);
+		circleObj = new Object(shader, materialLamp, circle);
+		cylinderObj0 = new Object(shader, materialLamp, cylinder);
+		cylinderObj1 = new Object(shader, materialLamp, cylinder);
+		sphereObj0 = new Object(shader, materialLamp, sphere);
+		sphereObj1 = new Object(shader, materialLamp, sphere);
+		sphereObj2 = new Object(shader, materialLamp, sphere);
+		paraboloidObj = new Object(shader, materialLamp, paraboloid);
+		
+		cylinderObjStand->scale = vec3(bigCylinderR,bigCylinderR,bigCylinderH/2);
+		circleObj->scale = vec3(bigCylinderR,bigCylinderR,1);
+		cylinderObj0->scale = vec3(cylinderR,cylinderR,cylinderH0/2);
+		cylinderObj1->scale = vec3(cylinderR,cylinderR,cylinderH1/2);
+		sphereObj0->scale = vec3(sphereR,sphereR,sphereR);
+		sphereObj1->scale = sphereObj0->scale;
+		sphereObj2->scale = sphereObj0->scale;
+
+		cylinderObj0->rotationAxis = rot0;
+		cylinderObj1->rotationAxis = rot1;
+
+		cylinderObjStand->afterScaleTranslation = vec3(0,0,bigCylinderH/2);
+		circleObj->translation = vec3(0,0,bigCylinderH);
+		sphereObj0->translation = joint0;
+
+		cylinderObj0->rotationSpeed = 3.0f;
+		cylinderObj1->rotationSpeed = -2.0f;
+		paraboloidObj->rotationSpeed = -3.0f;
+
+		objects.push_back(cylinderObjStand);
+		objects.push_back(circleObj);
+		objects.push_back(cylinderObj0);
+		objects.push_back(cylinderObj1);
+		objects.push_back(sphereObj0);
+		objects.push_back(sphereObj1);
+		objects.push_back(sphereObj2);
+		objects.push_back(paraboloidObj);
+
+		Recalc();
+	}
+
 	void Recalc() {
+		vec3 dir0 = cylinderObj0->dir;
+		vec3 dir1 = cylinderObj1->dir;
+
 		vec3 joint1 = joint0+cylinderH0*dir0;
 		vec3 joint2 = joint1+cylinderH1*dir1;
 
@@ -511,17 +551,40 @@ class Scene {
 		paraboloidObj->dir = paraDir;
 	}
 
+	void Draw(RenderState state) {
+		for (Object* object: objects) {
+			object->Draw(state);
+		}
+	}
+
+	void Animate(float dt) {
+		for (Object* object: objects) {
+			object->Animate(dt);
+		}
+		Recalc();
+	}
+};
+
+class Scene {
+	std::vector<Object *> objects;
+	Camera camera;
+	std::vector<Light> lights;
+	
+	//vec3 La = vec3(0.1f, 0.1f, 0.1f);
+	//float epsilon = 0.005;
+
+	vec3 viewUp = vec3(0,0,1);
+	vec3 lookat = vec3(1,0,0);
+	vec3 eye = vec3(7,0,5);
+
+	//vec3 sun = vec3(5,5,5);
+
+  public:
 	void Build() {
 		// Shaders
 		Shader * phongShader = new PhongShader();
 
 		// Materials
-		Material * materialLamp = new Material;
-		materialLamp->kd = vec3(55, 60, 63)/255.0f;
-		materialLamp->ks = vec3(2,2,2);
-		materialLamp->ka = vec3(0,0,0);
-		materialLamp->shininess = 50;
-
 		Material * materialPlane = new Material;
 		materialPlane->kd = vec3(110, 76, 67)/255.0f;
 		materialPlane->ks = vec3(0.1f,0.1f,0.1f);
@@ -529,47 +592,13 @@ class Scene {
 		materialPlane->shininess = 50;
 
 		// Geometries
-		Geometry* plane = new Plane();
-		Geometry* cylinder = new Cylinder();
-		Geometry* circle = new Circle();
-		Geometry* sphere = new Sphere();
-		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
-
-		planeObj = new Object(phongShader, materialPlane, plane);
-		cylinderObjStand = new Object(phongShader, materialLamp, cylinder);
-		circleObj = new Object(phongShader, materialLamp, circle);
-		cylinderObj0 = new Object(phongShader, materialLamp, cylinder);
-		cylinderObj1 = new Object(phongShader, materialLamp, cylinder);
-		sphereObj0 = new Object(phongShader, materialLamp, sphere);
-		sphereObj1 = new Object(phongShader, materialLamp, sphere);
-		sphereObj2 = new Object(phongShader, materialLamp, sphere);
-		paraboloidObj = new Object(phongShader, materialLamp, paraboloid);
-		
+		Plane* plane = new Plane();
+		Object* planeObj = new Object(phongShader, materialPlane, plane);
 		planeObj->scale = vec3(200,200,1);
-		cylinderObjStand->scale = vec3(bigCylinderR,bigCylinderR,bigCylinderH/2);
-		circleObj->scale = vec3(bigCylinderR,bigCylinderR,1);
-		cylinderObj0->scale = vec3(cylinderR,cylinderR,cylinderH0/2);
-		cylinderObj1->scale = vec3(cylinderR,cylinderR,cylinderH1/2);
-		sphereObj0->scale = vec3(sphereR,sphereR,sphereR);
-		sphereObj1->scale = sphereObj0->scale;
-		sphereObj2->scale = sphereObj0->scale;
-
-		cylinderObj0->rotationAxis = rot0;
-		cylinderObj1->rotationAxis = rot1;
-
-		cylinderObjStand->afterScaleTranslation = vec3(0,0,bigCylinderH/2);
-		circleObj->translation = vec3(0,0,bigCylinderH);
-		sphereObj0->translation = joint0;
-
 		objects.push_back(planeObj);
-		objects.push_back(cylinderObjStand);
-		objects.push_back(circleObj);
-		objects.push_back(cylinderObj0);
-		objects.push_back(cylinderObj1);
-		objects.push_back(sphereObj0);
-		objects.push_back(sphereObj1);
-		objects.push_back(sphereObj2);
-		objects.push_back(paraboloidObj);
+
+		Object* lamp = new LampObject(phongShader);
+		objects.push_back(lamp);
 
 		// Camera
 		camera.wEye = eye;
@@ -585,8 +614,6 @@ class Scene {
 		lights[1].wPosition = vec4(5, 10, 20, 0);
 		lights[1].La = vec3(0.2f, 0.2f, 0.2f);
 		lights[1].Le = vec3(0, 3, 0);
-
-		Recalc();
 	}
 
 	void Render() {
