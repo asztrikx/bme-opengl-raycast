@@ -111,7 +111,7 @@ struct Material {
 
 struct Light {
 	vec3 La, Le; // TODO why La
-	vec4 wPosition; // homogeneous coordinates, can be at ideal point
+	vec3 wPosition; // homogeneous coordinates, can be at ideal point
 };
 
 struct RenderState {
@@ -150,7 +150,7 @@ class PhongShader : public Shader {
 
 		struct Light {
 			vec3 La, Le;
-			vec4 wPosition;
+			vec3 wPosition;
 		};
 
 		uniform mat4 MVP, M, Minv;
@@ -164,15 +164,15 @@ class PhongShader : public Shader {
 		out vec3 wNormal;
 		out vec3 wView;
 		out vec3 wLight[8];
-		out vec3 pos;
+		out vec3 wPos;
 
 		void main() {
 			gl_Position = vec4(vtxPos, 1) * MVP;
-			pos = vtxPos;
 			
 			vec4 wPosition = vec4(vtxPos, 1) * M;
+			wPos = (wPosition / wPosition.w).xyz;
 			for(int i = 0; i < nLights; i++) {
-				wLight[i] = lights[i].wPosition.xyz * wPosition.w - wPosition.xyz * lights[i].wPosition.w;
+				wLight[i] = lights[i].wPosition * wPosition.w - wPosition.xyz;
 			}
 		    wView  = wEye * wPosition.w - wPosition.xyz;
 		    wNormal = (Minv * vec4(vtxNorm, 0)).xyz;
@@ -185,7 +185,7 @@ class PhongShader : public Shader {
 
 		struct Light {
 			vec3 La, Le;
-			vec4 wPosition;
+			vec3 wPosition;
 		};
 
 		struct Material {
@@ -199,12 +199,14 @@ class PhongShader : public Shader {
 		uniform vec3 paraDir;
 		uniform float paraAngle;
 
-		uniform vec3 paraF, paraN, paraP;
+		uniform vec3 paraF;
+		uniform vec3 paraN;
+		uniform vec3 paraP;
 
 		in vec3 wNormal;
 		in vec3 wView;
 		in vec3 wLight[8];
-		in vec3 pos; //tesselated
+		in vec3 wPos; //tesselated
 		
         out vec4 fragmentColor;
 
@@ -217,7 +219,7 @@ class PhongShader : public Shader {
 			vec3 V = normalize(wView); 
 			if (dot(N, V) < 0) N = -N; // TODO do it in vertex shader
 
-			bool inPara = (abs(paraImplicit(pos)) < 1.0f);
+			bool inPara = paraImplicit(wPos) <= 0.2f;
 
 			// TODO kd 2x volt texColorozva :D
 			// TODO sky color was La in hf2
@@ -225,13 +227,13 @@ class PhongShader : public Shader {
 			for(int i = 0; i < nLights; i++) {
 				vec3 L = normalize(wLight[i]);
 				vec3 H = normalize(L + V);
-				float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
-				// TODO ambient is calculated for every light wtf
-				radiance += material.ka * lights[i].La;
+				vec3 Le = lights[i].Le;
+				Le = Le / pow(length(wPos - lights[i].wPosition),2);
 
-				// Para blocks
+				radiance += material.ka * lights[i].La; // TODO why
 				if (i != 0 || inPara || acos(dot(-L,paraDir)) < paraAngle) {
-					radiance += (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * lights[i].Le;
+					float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
+					radiance += (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * Le;
 				}
 			}
 			fragmentColor = vec4(radiance, 1);
@@ -626,15 +628,12 @@ class Scene {
 	std::vector<Object *> objects;
 	Camera camera;
 	std::vector<Light> lights;
-	
-	//vec3 La = vec3(0.1f, 0.1f, 0.1f);
-	//float epsilon = 0.005;
 
 	vec3 viewUp = vec3(0,0,1);
 	vec3 lookat = vec3(1,0,0);
 	vec3 eye = vec3(7,0,5);
 
-	vec4 sun = vec4(5,5,5,1);
+	vec3 sun = vec3(5,5,5);
 	
 	LampObject* lampObj;
 
@@ -667,18 +666,18 @@ class Scene {
 		// Lights
 		lights.resize(2);
 		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[0].Le = vec3(2,2,2);
+		lights[0].Le = vec3(20,20,20);
 
 		lights[1].wPosition = sun;
 		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[1].Le = vec3(2, 2, 2);
+		lights[1].Le = vec3(10, 10, 10);
 
 		Recalc();
 	}
 
 	void Recalc() {
 		vec3 wLightPos = lampObj->getJoint2() + lampObj->paraF*lampObj->paraboloidObj->dir;
-		lights[0].wPosition = vec4(wLightPos.x,wLightPos.y,wLightPos.z,1);
+		lights[0].wPosition = vec3(wLightPos.x,wLightPos.y,wLightPos.z);
 	}
 
 	void Render() {
