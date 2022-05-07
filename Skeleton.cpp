@@ -75,7 +75,7 @@ mat4 Identity() {
 	);
 }
 
-const int tessellationLevel = 20;
+const int tessellationLevel = 50;
 
 struct Camera {
 	vec3 wEye, wLookat, wVup;
@@ -111,11 +111,11 @@ struct Material {
 
 struct Light {
 	vec3 La, Le; // TODO why La
-	vec3 wPosition; // homogeneous coordinates, can be at ideal point
+	vec3 wPosition;
 };
 
 struct RenderState {
-	mat4 MVP, M, Minv, V, P;
+	mat4 MVP, M, Minv, V, P; // V,P: minden M trafó után lehet csak beszorozni, amit csak az utolsó osztályban lesz meg
 	Material* material;
 	std::vector<Light> lights;
 	vec3 wEye;
@@ -339,8 +339,8 @@ class ParamSurface : public Geometry {
 		Dnum2 U(u, vec2(1, 0)), V(v, vec2(0, 1));
 		eval(U, V, X, Y, Z);
 		vtxData.position = vec3(X.f, Y.f, Z.f);
-		vec3 drdU(X.d.x, Y.d.x, Z.d.x), drdV(X.d.y, Y.d.y, Z.d.y);
-		vtxData.normal = cross(drdU, drdV);
+		vec3 drdU(X.d.x, Y.d.x, Z.d.x), drdV(X.d.y, Y.d.y, Z.d.y); //!!!
+		vtxData.normal = cross(drdU, drdV); //!!!
 		return vtxData;
 	}
 
@@ -427,12 +427,12 @@ struct Object {
 	Shader* shader;
 	Material* material;
 	Geometry* geometry;
-	vec3 scale, translation, afterScaleTranslation, rotationAxis;
-	float rotationSpeed;
-	vec3 dir;
+	vec3 scale = vec3(1,1,1), afterScaleTranslation = vec3(0,0,0), rotationAxis = vec3(0,0,1);
+	float rotationSpeed = 1;
+	vec3 translation = vec3(0,0,0);
+	vec3 dir = vec3(0,0,1);
 	
-	Object(Shader * _shader, Material * _material, Geometry * _geometry)
-	:scale(vec3(1, 1, 1)), translation(vec3(0, 0, 0)), afterScaleTranslation(0,0,0), rotationAxis(0, 0, 1), dir(0,0,1) {
+	Object(Shader * _shader, Material * _material, Geometry * _geometry) {
 		shader = _shader;
 		material = _material;
 		geometry = _geometry;
@@ -443,7 +443,7 @@ struct Object {
 		vec3 axis = cross(baseAxis, dir);
 		float angle = acosf(dot(baseAxis, normalize(dir)));
 		mat4 rotation, rotationInv;
-		if (floatEqual(angle, 0.0f)) {
+		if (floatEqual(angle, 0.0f)) { // not the same axis is the problem but that cross creates null vector as axis
 			rotation = rotationInv = Identity();
 		} else {
 			rotation = RotationMatrix(angle, axis);
@@ -453,7 +453,6 @@ struct Object {
 		M = M * TranslateMatrix(afterScaleTranslation);
 		M = M * rotation;
 		M = M * TranslateMatrix(translation);
-		M = M;
 
 		Minv = TranslateMatrix(-translation);
 		Minv = Minv * rotationInv;
@@ -479,12 +478,13 @@ struct Object {
 	}
 };
 
-struct LampObject: public Object {
+class LampObject: public Object {
 	float bigCylinderH = 0.1;
 	float bigCylinderR = 0.5;
 	float sphereR = 1.0f/8;
 	float cylinderR = sphereR / 3;
 	float paraH = 0.5, paraF = cylinderR + 0.1;
+	float paraAngle = getParaAngle();
 	float cylinderH0 = 2;
 	float cylinderH1 = 1;
 	vec3 rot0 = normalize(vec3(1,1,1.5));
@@ -502,12 +502,13 @@ struct LampObject: public Object {
 
 	std::vector<Object*> objects;
 
+  public:
 	LampObject(Shader* shader)
 	: Object(nullptr, nullptr, nullptr) {
 		Material * materialLamp = new Material;
 		materialLamp->kd = vec3(55, 60, 63)/255.0f;
 		materialLamp->ks = vec3(2,2,2);
-		materialLamp->ka = vec3(0,0,0);
+		materialLamp->ka = materialLamp->kd * M_PI;
 		materialLamp->shininess = 50;
 
 		Geometry* cylinder = new Cylinder();
@@ -564,9 +565,7 @@ struct LampObject: public Object {
 
 	vec3 getJoint1() {
 		vec3 dir0 = cylinderObj0->dir;
-		vec3 dir1 = cylinderObj1->dir;
 		vec3 joint1 = joint0+cylinderH0*dir0;
-		vec3 joint2 = joint1+cylinderH1*dir1;
 		return joint1;
 	}
 
@@ -577,6 +576,10 @@ struct LampObject: public Object {
 		vec3 joint2 = joint1+cylinderH1*dir1;
 		return joint2;
 	}
+
+	vec3 getParaF() { return paraboloidObj->translation + paraboloidObj->dir*paraF; }
+
+	vec3 getParaP() { return paraboloidObj->translation - paraboloidObj->dir*paraF; }
 
 	float getParaAngle() {
 		float dist = paraH + paraF;
@@ -591,10 +594,10 @@ struct LampObject: public Object {
 
 	void setRenderState(RenderState* state) {
 		state->paraDir = paraboloidObj->dir;
-		state->paraAngle = getParaAngle();
-		state->paraF = paraboloidObj->translation + state->paraDir*paraF;
+		state->paraAngle = paraAngle;
+		state->paraF = getParaF();
 		state->paraN = state->paraDir;
-		state->paraP = paraboloidObj->translation - state->paraDir*paraF;
+		state->paraP = getParaP();
 	}
 
 	void Recalc() {
@@ -646,16 +649,17 @@ class Scene {
 		Material * materialPlane = new Material();
 		materialPlane->kd = vec3(110, 76, 67)/255.0f;
 		materialPlane->ks = vec3(0.1f,0.1f,0.1f);
-		materialPlane->ka = vec3(0, 0, 0);
+		materialPlane->ka = materialPlane->kd * M_PI;
 		materialPlane->shininess = 50;
 
 		// Geometries
 		Plane* plane = new Plane();
 		Object* planeObj = new Object(phongShader, materialPlane, plane);
 		planeObj->scale = vec3(200,200,1);
-		objects.push_back(planeObj);
 
 		lampObj = new LampObject(phongShader);
+
+		objects.push_back(planeObj);
 		objects.push_back(lampObj);
 
 		// Camera
@@ -676,8 +680,7 @@ class Scene {
 	}
 
 	void Recalc() {
-		vec3 wLightPos = lampObj->getJoint2() + lampObj->paraF*lampObj->paraboloidObj->dir;
-		lights[0].wPosition = vec3(wLightPos.x,wLightPos.y,wLightPos.z);
+		lights[0].wPosition = lampObj->getParaF();
 	}
 
 	void Render() {
@@ -686,7 +689,7 @@ class Scene {
 		state.V = camera.V();
 		state.P = camera.P();
 		state.lights = lights;
-		lampObj->setRenderState(&state);
+		lampObj->setRenderState(&state); // every object has to know this for para shadow
 		for (Object * obj : objects) obj->Draw(state);
 	}
 
@@ -700,7 +703,7 @@ class Scene {
 		camera.wEye = eye;
 
 		for (Object * obj : objects) obj->Animate(dt);
-		Recalc();
+		Recalc(); // must be after animate for light to be in correct place
 	}
 };
 
