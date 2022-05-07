@@ -158,8 +158,8 @@ class PhongShader : public Shader {
 		uniform int nLights;
 		uniform vec3 wEye;
 
-		layout(location = 0) in vec3  vtxPos;
-		layout(location = 1) in vec3  vtxNorm;
+		layout(location = 0) in vec3 vtxPos;
+		layout(location = 1) in vec3 vtxNorm;
 
 		out vec3 wNormal;
 		out vec3 wView;
@@ -167,14 +167,17 @@ class PhongShader : public Shader {
 		out vec3 wPos;
 
 		void main() {
+			// ndc
 			gl_Position = vec4(vtxPos, 1) * MVP;
 			
+			// world
+			// proj geo: nincs vektor, irány
 			vec4 wPosition = vec4(vtxPos, 1) * M;
-			wPos = (wPosition / wPosition.w).xyz;
+			wPos = wPosition.xyz / wPosition.w;
 			for(int i = 0; i < nLights; i++) {
-				wLight[i] = lights[i].wPosition * wPosition.w - wPosition.xyz;
+				wLight[i] = lights[i].wPosition - wPos;
 			}
-		    wView  = wEye * wPosition.w - wPosition.xyz;
+		    wView  = wEye - wPos;
 		    wNormal = (Minv * vec4(vtxNorm, 0)).xyz;
 		}
 	)";
@@ -195,7 +198,8 @@ class PhongShader : public Shader {
 
 		uniform Material material;
 		uniform Light[8] lights;
-		uniform int   nLights;
+		uniform int nLights;
+
 		uniform vec3 paraDir;
 		uniform float paraAngle;
 
@@ -203,10 +207,10 @@ class PhongShader : public Shader {
 		uniform vec3 paraN;
 		uniform vec3 paraP;
 
-		in vec3 wNormal;
-		in vec3 wView;
-		in vec3 wLight[8];
-		in vec3 wPos; //tesselated
+		in vec3 wNormal;	// merre a normál vektor: nem normalizált
+		in vec3 wView;    	// merre a szem: nem normalizált
+		in vec3 wLight[8];	// fény pozíciók: nem normalizált
+		in vec3 wPos;		// pozíció: tesszellált!!!
 		
         out vec4 fragmentColor;
 
@@ -217,9 +221,13 @@ class PhongShader : public Shader {
 		void main() {
 			vec3 N = normalize(wNormal);
 			vec3 V = normalize(wView); 
-			if (dot(N, V) < 0) N = -N; // TODO do it in vertex shader
+			if (dot(N, V) < 0) N = -N; // probably can be done in vertex shader
+			/*if (length(N) <= 0.2) {
+				fragmentColor = vec4(vec3(1,0,0), 1);
+				return;
+			}*/
 
-			bool inPara = paraImplicit(wPos) <= 0.2f;
+			bool inPara = paraImplicit(wPos) <= 0.0f;
 
 			// TODO kd 2x volt texColorozva :D
 			// TODO sky color was La in hf2
@@ -230,11 +238,19 @@ class PhongShader : public Shader {
 				vec3 Le = lights[i].Le;
 				Le = Le / pow(length(wPos - lights[i].wPosition),2);
 
-				radiance += material.ka * lights[i].La; // TODO why
+				radiance += material.ka * lights[i].La; // TODO why, we need 1 ambient
 				if (i != 0 || inPara || acos(dot(-L,paraDir)) < paraAngle) {
 					float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
 					radiance += (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * Le;
 				}
+
+				/*if (cosTheta == 0 && cosDelta == 0) {
+					radiance = vec3(0,0,1);
+				} else if (cosTheta == 0) {
+					radiance = vec3(1,0,0);
+				} else if(cosDelta == 0) {
+					radiance = vec3(0,1,0);
+				}*/
 			}
 			fragmentColor = vec4(radiance, 1);
 		}
@@ -406,7 +422,7 @@ struct Paraboloid : public ParamSurface {
 		V = V * height;
 		
 		float dist = V.f - eP.z;
-		float r = sqrtf(powf(dist,2) - powf(abs(V.f - f.z),2));
+		float r = sqrtf(powf(dist,2) - powf(V.f - f.z,2));
 		X = Cos(U) * r;
 		Y = Sin(U) * r;
 		Z = V;
@@ -441,9 +457,9 @@ struct Object {
 	virtual void SetModelingTransform(mat4& M, mat4& Minv) {
 		vec3 baseAxis(0,0,1);
 		vec3 axis = cross(baseAxis, dir);
-		float angle = acosf(dot(baseAxis, normalize(dir)));
+		float angle = acosf(dot(baseAxis, normalize(dir))); // normalize may be unnec.
 		mat4 rotation, rotationInv;
-		if (floatEqual(angle, 0.0f)) { // not the same axis is the problem but that cross creates null vector as axis
+		if (floatEqual(angle, 0.0f) || floatEqual(angle, M_PI)) { // not the same axis is the problem but that cross creates null vector as axis
 			rotation = rotationInv = Identity();
 		} else {
 			rotation = RotationMatrix(angle, axis);
@@ -475,6 +491,7 @@ struct Object {
 		vec4 t;
 		t = vec4(dir.x, dir.y, dir.z, 1) * RotationMatrix(rotationSpeed*dt, rotationAxis);
 		dir = vec3(t.x, t.y, t.z); //its normalized
+		dir = normalize(dir);
 	}
 };
 
@@ -668,13 +685,13 @@ class Scene {
 		camera.wVup = viewUp;
 
 		// Lights
-		lights.resize(2);
+		lights.resize(1);
 		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
 		lights[0].Le = vec3(20,20,20);
 
-		lights[1].wPosition = sun;
+		/*lights[1].wPosition = sun;
 		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[1].Le = vec3(10, 10, 10);
+		lights[1].Le = vec3(10, 10, 10);*/
 
 		Recalc();
 	}
@@ -702,6 +719,7 @@ class Scene {
 		eye = eye+lookat;
 		camera.wEye = eye;
 
+		return;
 		for (Object * obj : objects) obj->Animate(dt);
 		Recalc(); // must be after animate for light to be in correct place
 	}
