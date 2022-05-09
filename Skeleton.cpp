@@ -416,7 +416,7 @@ struct Paraboloid : public ParamSurface {
 	}
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
 		U = U * 2.0f * (float)M_PI;
-		V = V * height;
+		V = V * V * height;
 		
 		Dnum2 Dist = V - eP.z;
 		Dnum2 R = Pow(Pow(Dist,2) - Pow(V-f.z,2), 0.5);
