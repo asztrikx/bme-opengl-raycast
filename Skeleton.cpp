@@ -613,7 +613,7 @@ class LampObject: public Object {
 		sphereObj1->translation = joint1;
 		cylinderObj1->translation = joint1;
 		sphereObj2->translation = joint2;
-		paraboloidObj->translation = joint2;
+		paraboloidObj->translation = joint2 + paraboloidObj->dir * sphereR;
 
 		paraboloidObj->rotationAxis = cylinderObj1->dir;
 	}
