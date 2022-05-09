@@ -124,14 +124,13 @@ struct Light {
 };
 
 struct RenderState {
-	mat4 MVP, M, Minv, V, P; // V,P: minden M trafó után lehet csak beszorozni, amit csak az utolsó osztályban lesz meg
+	mat4 MVP, M, Minv, V, P;
 	Material* material;
 	std::vector<Light> lights;
 	vec3 wEye;
-	// para block
 	vec3 paraDir;
 	float paraAngle;
-	// para allow
+	
 	vec3 paraF, paraN, paraP;
 	vec3 La;
 };
@@ -176,11 +175,8 @@ class PhongShader : public Shader {
 		out vec3 wPos;
 
 		void main() {
-			// ndc
 			gl_Position = vec4(vtxPos, 1) * MVP;
 			
-			// world
-			// proj geo: nincs vektor, irány
 			vec4 wPosition = vec4(vtxPos, 1) * M;
 			wPos = wPosition.xyz / wPosition.w;
 			for(int i = 0; i < nLights; i++) {
@@ -218,10 +214,10 @@ class PhongShader : public Shader {
 
 		uniform vec3 La;
 
-		in vec3 wNormal;	// merre a normál vektor: nem normalizált
-		in vec3 wView;    	// merre a szem: nem normalizált
-		in vec3 wLight[8];	// fény pozíciók: nem normalizált
-		in vec3 wPos;		// pozíció: tesszellált!!!
+		in vec3 wNormal;
+		in vec3 wView;
+		in vec3 wLight[8];
+		in vec3 wPos;
 		
         out vec4 fragmentColor;
 
@@ -232,11 +228,10 @@ class PhongShader : public Shader {
 		void main() {
 			vec3 N = normalize(wNormal);
 			vec3 V = normalize(wView); 
-			if (dot(N, V) < 0) N = -N; // probably can be done in vertex shader
+			if (dot(N, V) < 0) N = -N;
 
 			bool inPara = paraImplicit(wPos) <= 0.0f;
 
-			// TODO sky color was La in hf2
 			vec3 radiance = material.ka * La;
 			for(int i = 0; i < nLights; i++) {
 				vec3 L = normalize(wLight[i]);
@@ -280,7 +275,6 @@ class PhongShader : public Shader {
 	}
 };
 
-/*Start of Geometry*/
 class Geometry {
   protected:
 	unsigned int vao, vbo;
@@ -289,7 +283,7 @@ class Geometry {
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 		glGenBuffers(1, &vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vbo); // This is unneeded by logic but probably used somewhere
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	}
 
 	virtual void Draw() = 0;
@@ -300,7 +294,6 @@ class Geometry {
 	}
 };
 
-// TODO move this create to outside func
 class Circle: public Geometry {
 	struct VertexData {
 		vec3 position, normal;
@@ -337,7 +330,6 @@ class Circle: public Geometry {
 };
 
 class ParamSurface : public Geometry {
-	// inline struct
 	struct VertexData {
 		vec3 position, normal;
 	};
@@ -354,8 +346,8 @@ class ParamSurface : public Geometry {
 		Dnum2 U(u, vec2(1, 0)), V(v, vec2(0, 1));
 		eval(U, V, X, Y, Z);
 		vtxData.position = vec3(X.f, Y.f, Z.f);
-		vec3 drdU(X.d.x, Y.d.x, Z.d.x), drdV(X.d.y, Y.d.y, Z.d.y); //!!!
-		vtxData.normal = cross(drdU, drdV); //!!!
+		vec3 drdU(X.d.x, Y.d.x, Z.d.x), drdV(X.d.y, Y.d.y, Z.d.y);
+		vtxData.normal = cross(drdU, drdV);
 		return vtxData;
 	}
 
@@ -442,8 +434,6 @@ struct Cylinder : public ParamSurface {
 	}
 };
 
-/*Start of Object*/
-// collection & transforms
 struct Object {
 	Shader* shader;
 	Material* material;
@@ -462,10 +452,12 @@ struct Object {
 	virtual void SetModelingTransform(mat4& M, mat4& Minv) {
 		vec3 baseAxis(0,0,1);
 		vec3 axis = cross(baseAxis, dir);
-		float angle = acosf(dot(baseAxis, normalize(dir))); // normalize may be unnec.
+		float angle = acosf(dot(baseAxis, dir));
 		mat4 rotation, rotationInv;
-		if (floatEqual(angle, 0.0f) || floatEqual(angle, M_PI)) { // not the same axis is the problem but that cross creates null vector as axis
+		if (floatEqual(angle, 0.0f)) {
 			rotation = rotationInv = Identity();
+		} else if (floatEqual(angle, M_PI)) {
+			rotation = rotationInv = RotationMatrix(M_PI, vec3(1,0,0));
 		} else {
 			rotation = RotationMatrix(angle, axis);
 			rotationInv = RotationMatrix(-angle, axis);
@@ -495,8 +487,7 @@ struct Object {
 	virtual void Animate(float dt) {
 		vec4 t;
 		t = vec4(dir.x, dir.y, dir.z, 1) * RotationMatrix(rotationSpeed*dt, rotationAxis);
-		dir = vec3(t.x, t.y, t.z); //its normalized
-		dir = normalize(dir);
+		dir = vec3(t.x, t.y, t.z);
 	}
 };
 
@@ -678,17 +669,14 @@ class Scene {
 
   public:
 	void Build() {
-		// Shaders
 		Shader * phongShader = new PhongShader();
 
-		// Materials
 		Material * materialPlane = new Material();
 		materialPlane->kd = vec3(110, 76, 67)/255.0f;
 		materialPlane->ks = vec3(0.1f,0.1f,0.1f);
 		materialPlane->ka = materialPlane->kd * M_PI;
 		materialPlane->shininess = 50;
 
-		// Geometries
 		Plane* plane = new Plane();
 		Object* planeObj = new Object(phongShader, materialPlane, plane);
 		planeObj->scale = vec3(200,200,1);
@@ -698,12 +686,10 @@ class Scene {
 		objects.push_back(planeObj);
 		objects.push_back(lampObj);
 
-		// Camera
 		camera.wEye = eye;
 		camera.wLookat = lookat;
 		camera.wVup = viewUp;
 
-		// Lights
 		lights.resize(2);
 		lights[0].Le = vec3(20,20,20);
 
@@ -724,7 +710,7 @@ class Scene {
 		state.P = camera.P();
 		state.lights = lights;
 		state.La = La;
-		lampObj->setRenderState(&state); // every object has to know this for para shadow
+		lampObj->setRenderState(&state);
 		for (Object * obj : objects) obj->Draw(state);
 	}
 
@@ -738,7 +724,7 @@ class Scene {
 		camera.wEye = eye;
 
 		for (Object * obj : objects) obj->Animate(dt);
-		Recalc(); // must be after animate for light to be in correct place
+		Recalc();
 	}
 };
 
