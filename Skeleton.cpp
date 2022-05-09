@@ -110,7 +110,7 @@ struct Material {
 };
 
 struct Light {
-	vec3 La, Le; // TODO why La
+	vec3 Le;
 	vec3 wPosition;
 };
 
@@ -124,6 +124,7 @@ struct RenderState {
 	float paraAngle;
 	// para allow
 	vec3 paraF, paraN, paraP;
+	vec3 La;
 };
 
 struct Shader : public GPUProgram {
@@ -137,7 +138,6 @@ struct Shader : public GPUProgram {
 	}
 
 	void setUniformLight(const Light& light, const std::string& name) {
-		setUniform(light.La, name + ".La");
 		setUniform(light.Le, name + ".Le");
 		setUniform(light.wPosition, name + ".wPosition");
 	}
@@ -149,7 +149,7 @@ class PhongShader : public Shader {
 		precision highp float;
 
 		struct Light {
-			vec3 La, Le;
+			vec3 Le;
 			vec3 wPosition;
 		};
 
@@ -187,7 +187,7 @@ class PhongShader : public Shader {
 		precision highp float;
 
 		struct Light {
-			vec3 La, Le;
+			vec3 Le;
 			vec3 wPosition;
 		};
 
@@ -207,6 +207,8 @@ class PhongShader : public Shader {
 		uniform vec3 paraN;
 		uniform vec3 paraP;
 
+		uniform vec3 La;
+
 		in vec3 wNormal;	// merre a normál vektor: nem normalizált
 		in vec3 wView;    	// merre a szem: nem normalizált
 		in vec3 wLight[8];	// fény pozíciók: nem normalizált
@@ -225,16 +227,14 @@ class PhongShader : public Shader {
 
 			bool inPara = paraImplicit(wPos) <= 0.0f;
 
-			// TODO kd 2x volt texColorozva :D
 			// TODO sky color was La in hf2
-			vec3 radiance = vec3(0, 0, 0);
+			vec3 radiance = material.ka * La;
 			for(int i = 0; i < nLights; i++) {
 				vec3 L = normalize(wLight[i]);
 				vec3 H = normalize(L + V);
 				vec3 Le = lights[i].Le;
 				Le = Le / pow(length(wPos - lights[i].wPosition),2);
 
-				radiance += material.ka * lights[i].La; // TODO why, we need 1 ambient
 				if (i != 0 || inPara || acos(dot(-L,paraDir)) < paraAngle) {
 					float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
 					radiance += (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * Le;
@@ -261,6 +261,8 @@ class PhongShader : public Shader {
 		setUniform(state.paraP, "paraP");
 
 		setUniformMaterial(*state.material, "material");
+
+		setUniform(state.La, "La");
 
 		setUniform((int)state.lights.size(), "nLights");
 		for (unsigned int i = 0; i < state.lights.size(); i++) {
@@ -642,6 +644,7 @@ class Scene {
 	vec3 eye = vec3(7,0,5);
 
 	vec3 sun = vec3(5,5,5);
+	vec3 La = vec3(0.1f, 0.1f, 0.1f);
 	
 	LampObject* lampObj;
 
@@ -674,11 +677,9 @@ class Scene {
 
 		// Lights
 		lights.resize(2);
-		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
 		lights[0].Le = vec3(20,20,20);
 
 		lights[1].wPosition = sun;
-		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
 		lights[1].Le = vec3(10, 10, 10);
 
 		Recalc();
@@ -694,6 +695,7 @@ class Scene {
 		state.V = camera.V();
 		state.P = camera.P();
 		state.lights = lights;
+		state.La = La;
 		lampObj->setRenderState(&state); // every object has to know this for para shadow
 		for (Object * obj : objects) obj->Draw(state);
 	}
