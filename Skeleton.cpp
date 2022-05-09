@@ -75,7 +75,7 @@ mat4 Identity() {
 	);
 }
 
-const int tessellationLevel = 50;
+const int tessellationLevel = 150;
 
 struct Camera {
 	vec3 wEye, wLookat, wVup;
@@ -222,10 +222,6 @@ class PhongShader : public Shader {
 			vec3 N = normalize(wNormal);
 			vec3 V = normalize(wView); 
 			if (dot(N, V) < 0) N = -N; // probably can be done in vertex shader
-			/*if (length(N) <= 0.2) {
-				fragmentColor = vec4(vec3(1,0,0), 1);
-				return;
-			}*/
 
 			bool inPara = paraImplicit(wPos) <= 0.0f;
 
@@ -243,14 +239,6 @@ class PhongShader : public Shader {
 					float cosTheta = max(dot(N,L), 0), cosDelta = max(dot(N,H), 0);
 					radiance += (material.kd * cosTheta + material.ks * pow(cosDelta, material.shininess)) * Le;
 				}
-
-				/*if (cosTheta == 0 && cosDelta == 0) {
-					radiance = vec3(0,0,1);
-				} else if (cosTheta == 0) {
-					radiance = vec3(1,0,0);
-				} else if(cosDelta == 0) {
-					radiance = vec3(0,1,0);
-				}*/
 			}
 			fragmentColor = vec4(radiance, 1);
 		}
@@ -421,10 +409,10 @@ struct Paraboloid : public ParamSurface {
 		U = U * 2.0f * (float)M_PI;
 		V = V * height;
 		
-		float dist = V.f - eP.z;
-		float r = sqrtf(powf(dist,2) - powf(V.f - f.z,2));
-		X = Cos(U) * r;
-		Y = Sin(U) * r;
+		Dnum2 Dist = V - eP.z;
+		Dnum2 R = Pow(Pow(Dist,2) - Pow(V-f.z,2), 0.5);
+		X = R * Cos(U);
+		Y = R * Sin(U);
 		Z = V;
 	}
 };
@@ -685,13 +673,13 @@ class Scene {
 		camera.wVup = viewUp;
 
 		// Lights
-		lights.resize(1);
+		lights.resize(2);
 		lights[0].La = vec3(0.1f, 0.1f, 0.1f);
 		lights[0].Le = vec3(20,20,20);
 
-		/*lights[1].wPosition = sun;
+		lights[1].wPosition = sun;
 		lights[1].La = vec3(0.1f, 0.1f, 0.1f);
-		lights[1].Le = vec3(10, 10, 10);*/
+		lights[1].Le = vec3(10, 10, 10);
 
 		Recalc();
 	}
@@ -719,7 +707,6 @@ class Scene {
 		eye = eye+lookat;
 		camera.wEye = eye;
 
-		return;
 		for (Object * obj : objects) obj->Animate(dt);
 		Recalc(); // must be after animate for light to be in correct place
 	}
