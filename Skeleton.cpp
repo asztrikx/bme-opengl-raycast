@@ -61,6 +61,15 @@ template<class T> Dnum<T> Pow(Dnum<T> g, float n) {
 
 typedef Dnum<vec2> Dnum2;
 
+std::pair<float,float> quardratic(float a, float b, float c) {
+	float discr = b*b-4.0f*a*c;
+	if (discr < 0) return std::make_pair(nanf(""),nanf(""));
+	float sqrtDiscr = sqrtf(discr);
+	float t1 = (-b+sqrtDiscr)/2.0f/a;
+	float t2 = (-b-sqrtDiscr)/2.0f/a;
+	return std::make_pair(t1,t2);
+}
+
 float floatEqual(float subject, float number) {
 	float eps = 0.00001;
 	return subject > number - eps && subject < number + eps;
@@ -376,7 +385,7 @@ class ParamSurface : public Geometry {
 };
 
 struct Plane: public ParamSurface {
-	Plane() { create (1,1); }
+	Plane() { create(1,1); }
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
 		U = U - 0.5f;
 		V = V - 0.5f;
@@ -385,9 +394,15 @@ struct Plane: public ParamSurface {
 };
 
 struct Sphere : public ParamSurface {
-	Sphere() { create (); }
+	float upperAngle;
+
+	Sphere(float _upperAngle = 0.0f) {
+		upperAngle = _upperAngle;
+		create();
+	}
+
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) {
-		U = U * 2.0f * (float)M_PI, V = V * (float)M_PI;
+		U = U * 2.0f * (float)M_PI, V = V * ((float)M_PI - upperAngle) + upperAngle;
 		X = Cos(U) * Sin(V); Y = Sin(U) * Sin(V); Z = Cos(V);
 	}
 };
@@ -521,6 +536,7 @@ class LampObject: public Object {
 		Geometry* cylinder = new Cylinder();
 		Geometry* circle = new Circle();
 		Geometry* sphere = new Sphere();
+		Geometry* openSphere = new Sphere(getSphereAngle());
 		Geometry* paraboloid = new Paraboloid(0.5, 0.14);
 
 		cylinderObjStand = new Object(shader, materialLamp, cylinder);
@@ -529,7 +545,7 @@ class LampObject: public Object {
 		cylinderObj1 = new Object(shader, materialLamp, cylinder);
 		sphereObj0 = new Object(shader, materialLamp, sphere);
 		sphereObj1 = new Object(shader, materialLamp, sphere);
-		sphereObj2 = new Object(shader, materialLamp, sphere);
+		sphereObj2 = new Object(shader, materialLamp, openSphere);
 		paraboloidObj = new Object(shader, materialLamp, paraboloid);
 		
 		cylinderObjStand->scale = vec3(bigCylinderR,bigCylinderR,bigCylinderH/2);
@@ -568,6 +584,16 @@ class LampObject: public Object {
 		objects.push_back(paraboloidObj);
 
 		Recalc();
+	}
+
+	float getSphereAngle() {
+		float a = sphereR;
+		float b = 4*paraF;
+		float c = -sphereR;
+		std::pair<float, float> sols = quardratic(a,b,c);
+		float A = sols.first;
+		float angle =  M_PI/2 - asinf(A);
+		return angle;
 	}
 
 	vec3 getJoint1() {
@@ -615,9 +641,11 @@ class LampObject: public Object {
 		sphereObj1->translation = joint1;
 		cylinderObj1->translation = joint1;
 		sphereObj2->translation = joint2;
-		paraboloidObj->translation = joint2 + paraboloidObj->dir * sphereR;
+		paraboloidObj->translation = joint2;
 
 		paraboloidObj->rotationAxis = cylinderObj1->dir;
+
+		sphereObj2->dir = paraboloidObj->dir;
 	}
 
 	void Draw(RenderState state) {
